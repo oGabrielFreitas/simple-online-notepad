@@ -27,4 +27,12 @@ Browsers without the File System Access API (including that pane) cannot open or
 
 In Claude Code, `preview_start` with the `notepad` entry in `.claude/launch.json` does the same.
 The explorer opens automatically; click a file to edit it, Ctrl+S saves in place, Ctrl+Shift+S = save as.
-Listens on 127.0.0.1 only; it never touches files outside the chosen folder. Not needed (and not deployed) on Coolify or shared hosting.
+The folder button opens a chooser to switch to any folder on the computer. Listens on 127.0.0.1 only; it only touches files inside the chosen folder. Not needed (and not deployed) on Coolify or shared hosting.
+
+### Config file (local mode)
+
+`notepad.config.json` (next to `server.js`) sets the folder the server opens at start, so you don't have to pass it every time:
+
+    { "folder": "D:/Projects/my-app", "port": 5173 }
+
+`folder` may be absolute or relative to `server.js`; leave it empty to use the current directory. A command-line folder (`npm start -- <folder>`) or `NOTEPAD_ROOT` overrides it.

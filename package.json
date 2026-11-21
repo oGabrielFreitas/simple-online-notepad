@@ -1,0 +1,12 @@
+{
+  "name": "simple-online-notepad",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple online notepad with optional local file server",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

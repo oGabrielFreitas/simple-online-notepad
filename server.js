@@ -15,9 +15,27 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = fs.realpathSync.native(path.resolve(process.argv[2] || process.env.NOTEPAD_ROOT || process.cwd()));
-const PORT = Number(process.env.PORT) || 5173;
 const APP = __dirname;
+
+// Optional notepad.config.json (next to server.js): { "folder": "D:/Projects/my-app", "port": 5173 }
+// Priority for the folder: command-line argument > NOTEPAD_ROOT > config file > current directory.
+let CONFIG = {};
+const CONFIG_FILE = path.join(APP, 'notepad.config.json');
+if (fs.existsSync(CONFIG_FILE)) {
+  try { CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
+  catch (e) { console.warn('Ignoring notepad.config.json (invalid JSON): ' + e.message); }
+}
+function pickRoot() {
+  const candidates = [process.argv[2], process.env.NOTEPAD_ROOT, CONFIG.folder && path.resolve(APP, String(CONFIG.folder)), process.cwd()];
+  for (const c of candidates) {
+    if (!c) continue;
+    try { const abs = fs.realpathSync.native(path.resolve(c)); if (fs.statSync(abs).isDirectory()) return abs; }
+    catch { console.warn('Folder not found, skipping: ' + c); }
+  }
+  return fs.realpathSync.native(process.cwd());
+}
+let ROOT = pickRoot();
+const PORT = Number(process.env.PORT) || Number(CONFIG.port) || 5173;
 const MAX_BYTES = 20 * 1024 * 1024;
 
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/app.js': 'app.js' };
@@ -77,7 +95,34 @@ const server = http.createServer(async (req, res) => {
 
     switch (route) {
       case 'GET /api/info':
-        return sendJson(res, { local: true, root: path.basename(ROOT) || ROOT });
+        return sendJson(res, { local: true, root: path.basename(ROOT) || ROOT, path: ROOT });
+
+      case 'GET /api/dirs': { // folder chooser: list sub-folders of any absolute path ('' = drives / filesystem root)
+        const start = req.url && url.searchParams.has('path') ? rel : ROOT;
+        if (!start && process.platform === 'win32') {
+          const drives = [];
+          for (let c = 65; c <= 90; c++) { const d = String.fromCharCode(c) + ':\\'; if (fs.existsSync(d)) drives.push({ name: d, path: d }); }
+          return sendJson(res, { path: '', parent: '', dirs: drives });
+        }
+        const abs = path.resolve(start || path.sep);
+        if (!fs.statSync(abs).isDirectory()) throw new HttpError(400, 'Not a folder');
+        let dirs = [];
+        try {
+          dirs = fs.readdirSync(abs, { withFileTypes: true })
+            .filter((d) => { try { return d.isDirectory() || (d.isSymbolicLink() && fs.statSync(path.join(abs, d.name)).isDirectory()); } catch { return false; } })
+            .map((d) => ({ name: d.name, path: path.join(abs, d.name) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        } catch { /* no permission: show empty */ }
+        const up = path.dirname(abs);
+        return sendJson(res, { path: abs, parent: up !== abs ? up : '', dirs });
+      }
+
+      case 'POST /api/root': { // switch the folder the notepad edits
+        const abs = path.resolve(rel);
+        if (!rel || !fs.statSync(abs).isDirectory()) throw new HttpError(400, 'Not a folder');
+        ROOT = fs.realpathSync.native(abs);
+        return sendJson(res, { local: true, root: path.basename(ROOT) || ROOT, path: ROOT });
+      }
 
       case 'GET /api/tree': {
         const dir = resolveSafe(rel);

@@ -1,0 +1,9 @@
+{
+  "host": "localhost",
+  "port": 5555,
+  "root": ".",
+  "open": "index.html",
+  "highlight": false,
+  "injectBody": true,
+  "ignore": [".git", ".claude", "node_modules"]
+}

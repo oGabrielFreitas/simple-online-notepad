@@ -173,13 +173,56 @@
       async getDirectoryHandle(name, opt) { const q = joinPath(p, name); if (opt && opt.create) await api('POST', 'mkdir', q); return mkDir(q); },
     };
   }
+  // Folder chooser (local mode): browse the computer through the server and switch the edited folder
+  const dlgPick = $('dlgPick');
+  let pickPath = '', pickParent = '';
+  async function pickLoad(p) {
+    try {
+      const r = await (await api('GET', 'dirs', p)).json();
+      pickPath = r.path; pickParent = r.parent;
+      $('pickPath').textContent = r.path || 'Drives';
+      $('pickUp').disabled = !r.path;
+      $('pickOk').disabled = !r.path;
+      const list = $('pickList');
+      list.innerHTML = '';
+      for (const d of r.dirs) {
+        const row = document.createElement('div');
+        row.className = 'ex-row dir';
+        row.textContent = '▸ ' + d.name;
+        row.onclick = () => pickLoad(d.path);
+        list.appendChild(row);
+      }
+      if (!r.dirs.length) list.innerHTML = '<div class="ex-row" style="color:var(--subtle)">No sub-folders</div>';
+    } catch (err) { alert('Could not list folders: ' + err.message); }
+  }
+  async function chooseFolder() {
+    await pickLoad('');            // start at the drives / filesystem root
+    if (rootPathNow) await pickLoad(rootPathNow); // ...then jump to the current folder
+    dlgPick.showModal();
+  }
+  let rootPathNow = '';
+  $('pickUp').onclick = () => pickLoad(pickParent);
+  $('pickCancel').onclick = () => dlgPick.close();
+  $('pickOk').onclick = async () => {
+    if (dirty && !confirm('Discard unsaved changes to ' + fileHandle.name + '?')) return;
+    try {
+      const info = await (await api('POST', 'root', pickPath)).json();
+      localRoot = info.root; rootPathNow = info.path;
+      fileHandle = null; dirty = false; setLabel();
+      closeFolder();
+      dlgPick.close();
+      await openFolder();
+    } catch (err) { alert('Could not open folder: ' + err.message); }
+  };
+  dlgPick.addEventListener('click', (e) => { if (e.target === dlgPick) dlgPick.close(); });
+
   async function detectLocal() {
     try {
       const r = await fetch('/api/info', { headers: { 'X-Notepad': '1' } });
       if (!r.ok) return;
       const info = await r.json();
       if (!info || !info.local) return;
-      local = true; localRoot = info.root; hasFS = hasDir = true; fsReason = '';
+      local = true; localRoot = info.root; rootPathNow = info.path; hasFS = hasDir = true; fsReason = '';
       applyFilesSettings();
       await openFolder();
     } catch { /* static hosting: no API, keep browser-only mode */ }
@@ -348,7 +391,7 @@
       }
     } catch (err) { alert('Could not create: ' + err.message); }
   }
-  $('btnFolder').onclick = openFolder;
+  $('btnFolder').onclick = () => (local ? chooseFolder() : openFolder());
   $('exClose').onclick = closeFolder;
   $('exRefresh').onclick = () => curDir && refreshDir(curDir);
   $('exNewFile').onclick = () => createEntry('file');
