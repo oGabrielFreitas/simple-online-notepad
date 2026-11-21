@@ -7,7 +7,16 @@
   <title>Notepad Online</title>
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23D77757'/></svg>">
-  <link rel="stylesheet" href="style.css">
+  <!-- Critical layout, inline on purpose: the editor keeps the full screen height even if style.css is stale/cached or fails to load. -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    [hidden] { display: none !important; }
+    #app { position: fixed; inset: 0; display: flex; }
+    #pane { position: relative; flex: 1; min-width: 0; min-height: 0; }
+    main { position: absolute; inset: 0; }
+    #hl, #ed { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; margin: 0; border: 0; overflow-y: scroll; white-space: pre-wrap; }
+  </style>
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 
 <body>
@@ -148,7 +157,7 @@
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 
 </html>
