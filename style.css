@@ -1,0 +1,105 @@
+/* Palette based on the default Claude Code (dark / light). */
+:root, :root[data-theme="dark"] {
+  --bg: #1f1f1f;
+  --fg: #ffffff;
+  --subtle: #999999;
+  --border: #444444;
+  --panel: #2a2a2a;
+  --accent: #d77757;          /* claude */
+  --c-comment: #999999;       /* subtle */
+  --c-string: #4eba65;        /* success */
+  --c-number: #ffc107;        /* warning */
+  --c-keyword: #d77757;       /* claude */
+  --c-func: #b1b9f9;          /* permission / suggestion */
+  --c-extra: #fd5db1;         /* bashBorder */
+}
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #000000;
+  --subtle: #666666;
+  --border: #d0d0d0;
+  --panel: #f3f3f3;
+  --accent: #d77757;
+  --c-comment: #666666;
+  --c-string: #2c7a39;
+  --c-number: #966c1e;
+  --c-keyword: #d77757;
+  --c-func: #5769f7;
+  --c-extra: #ff0087;
+}
+:root[data-theme="custom"] {
+  --border: color-mix(in srgb, var(--fg) 25%, transparent);
+  --panel: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  --subtle: color-mix(in srgb, var(--fg) 60%, var(--bg));
+  --accent: var(--fg);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+header {
+  position: fixed; top: 8px; right: 12px; z-index: 5;
+  display: flex; gap: 4px;
+}
+header button {
+  background: transparent; color: var(--subtle); border: 0; border-radius: 6px;
+  padding: 6px; cursor: pointer; display: grid; place-items: center;
+}
+header button:hover { color: var(--accent); background: var(--panel); }
+
+main { position: relative; height: 100%; width: 100%; max-width: var(--maxw, none); margin: 0 auto; }
+#hl, #ed {
+  position: absolute; inset: 0; margin: 0; border: 0; outline: 0;
+  padding: var(--pad-y, 24px) var(--pad-x, 24px);
+  font: inherit; line-height: inherit; letter-spacing: 0; tab-size: 4;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal;
+  overflow-y: scroll; scrollbar-width: none;
+  width: 100%; height: 100%;
+}
+#hl::-webkit-scrollbar, #ed::-webkit-scrollbar { display: none; }
+#hl { color: var(--fg); pointer-events: none; }
+#ed { background: transparent; color: var(--fg); resize: none; caret-color: var(--fg); }
+#ed::placeholder { color: var(--subtle); }
+body.hl-on #ed { color: transparent; }
+body:not(.hl-on) #hl { visibility: hidden; }
+
+.t-c { color: var(--c-comment); font-style: italic; }
+.t-s { color: var(--c-string); }
+.t-n { color: var(--c-number); }
+.t-k { color: var(--c-keyword); }
+.t-f { color: var(--c-func); }
+.t-x { color: var(--c-extra); }
+
+dialog {
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; width: min(92vw, 380px); font: inherit;
+}
+dialog::backdrop { background: rgba(0,0,0,.5); }
+h2 { margin: 0 0 14px; font-size: 16px; color: var(--accent); }
+fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 10px; }
+legend { color: var(--subtle); padding: 0 6px; font-size: 13px; }
+label { display: block; margin-bottom: 10px; color: var(--subtle); font-size: 13px; }
+label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 4px 14px 4px 0; color: var(--fg); }
+input[type=number] { width: 80px; padding: 5px 7px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+label.inline select { padding: 5px 7px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+input[type=text], input:not([type]), input[list], select {
+  display: block; width: 100%; margin-top: 4px; padding: 7px 9px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; font: inherit;
+}
+label.inline select { width: auto; margin: 0; }
+input[type=color] { border: 1px solid var(--border); background: none; width: 36px; height: 26px; padding: 0; }
+input[type=radio], input[type=checkbox] { accent-color: var(--accent); }
+.row { display: flex; gap: 8px; margin-top: 8px; }
+.row.end { justify-content: flex-end; }
+button.primary, button.text {
+  font: inherit; border-radius: 6px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--accent);
+}
+button.primary { background: var(--accent); color: var(--bg); }
+button.text { background: transparent; color: var(--fg); border-color: var(--border); }
+[hidden] { display: none !important; }
