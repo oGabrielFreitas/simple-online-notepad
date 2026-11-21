@@ -41,10 +41,35 @@ body {
   font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-header {
-  position: fixed; top: 8px; right: 12px; z-index: 5;
-  display: flex; gap: 4px;
+#app { display: flex; height: 100%; }
+#app.side-left { flex-direction: row; }
+#app.side-right { flex-direction: row-reverse; }
+#pane { position: relative; flex: 1; min-width: 0; height: 100%; }
+
+#explorer {
+  width: 260px; flex: none; height: 100%; display: flex; flex-direction: column;
+  background: var(--panel); font-size: 13px;
 }
+#app.side-right #explorer { border-left: 1px solid var(--border); }
+#app.side-left #explorer { border-right: 1px solid var(--border); }
+.ex-bar { display: flex; align-items: center; gap: 2px; padding: 6px; border-bottom: 1px solid var(--border); }
+.ex-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); padding-left: 4px; }
+.ex-bar button { background: transparent; color: var(--subtle); border: 0; border-radius: 4px; padding: 3px 6px; cursor: pointer; font: inherit; }
+.ex-bar button:hover { color: var(--accent); background: var(--bg); }
+.ex-tree { flex: 1; overflow: auto; padding: 4px 0; }
+.ex-row { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.ex-row:hover { background: var(--bg); }
+.ex-row.dir { color: var(--c-func, var(--fg)); }
+.ex-row.active { background: var(--bg); color: var(--accent); }
+.ex-row.cur-dir { box-shadow: inset 2px 0 var(--accent); }
+:root[data-theme="custom"] .ex-row.dir { color: var(--fg); }
+
+header {
+  position: absolute; top: 8px; right: 12px; z-index: 5;
+  display: flex; gap: 4px; align-items: center;
+}
+.file-label { color: var(--subtle); font-size: 12px; margin-right: 6px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+small { color: var(--subtle); display: block; margin-top: 4px; }
 header button {
   background: transparent; color: var(--subtle); border: 0; border-radius: 6px;
   padding: 6px; cursor: pointer; display: grid; place-items: center;
@@ -54,7 +79,7 @@ header button:hover { color: var(--accent); background: var(--panel); }
 main { position: relative; height: 100%; width: 100%; max-width: var(--maxw, none); margin: 0 auto; }
 #hl, #ed {
   position: absolute; inset: 0; margin: 0; border: 0; outline: 0;
-  padding: var(--pad-y, 24px) var(--pad-x, 24px);
+  padding: var(--pad-y, 36px) var(--pad-x, 24px);
   font: inherit; line-height: inherit; letter-spacing: 0; tab-size: 4;
   white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal;
   overflow-y: scroll; scrollbar-width: none;

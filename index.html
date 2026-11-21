@@ -11,7 +11,33 @@
 </head>
 
 <body>
+  <div id="app">
+  <aside id="explorer" hidden>
+    <div class="ex-bar">
+      <span id="exName" class="ex-name"></span>
+      <button id="exNewFile" title="New file" aria-label="New file">+F</button>
+      <button id="exNewDir" title="New folder" aria-label="New folder">+D</button>
+      <button id="exRefresh" title="Refresh" aria-label="Refresh">&#8635;</button>
+      <button id="exClose" title="Close folder" aria-label="Close folder">&times;</button>
+    </div>
+    <div id="exTree" class="ex-tree"></div>
+  </aside>
+  <div id="pane">
   <header>
+    <span id="fileLabel" class="file-label" hidden></span>
+    <button id="btnFolder" title="Open folder" aria-label="Open folder" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      </svg>
+    </button>
+    <button id="btnOpen" title="Open file" aria-label="Open file">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+        <path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3" />
+      </svg>
+    </button>
     <button id="btnSave" title="Save file" aria-label="Save">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round" stroke-linejoin="round">
@@ -33,6 +59,8 @@
     <pre id="hl" aria-hidden="true"></pre>
     <textarea id="ed" spellcheck="false" autofocus placeholder="Start writing..."></textarea>
   </main>
+  </div>
+  </div>
 
   <dialog id="dlgSettings">
     <form method="dialog">
@@ -89,6 +117,18 @@
             <option>ch</option>
           </select>
         </label>
+      </fieldset>
+
+      <fieldset id="filesBox">
+        <legend>Files</legend>
+        <label class="inline"><input type="checkbox" id="foldersOn"> Allow opening folders</label>
+        <label class="inline">Explorer side
+          <select id="side">
+            <option value="right">Right</option>
+            <option value="left">Left</option>
+          </select>
+        </label>
+        <small id="fsNote" hidden>File access needs Chrome or Edge.</small>
       </fieldset>
 
       <div class="row end"><button class="primary">Close</button></div>

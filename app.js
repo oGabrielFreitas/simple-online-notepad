@@ -81,7 +81,8 @@
     langOn: store.get('langOn', '1') === '1',
     lang: store.get('lang', 'txt'),
     padXVal: store.get('padXVal', '24'), padXUnit: store.get('padXUnit', 'px'),
-    padYVal: store.get('padYVal', '24'), padYUnit: store.get('padYUnit', 'px'),
+    padYVal: store.get('padYVal', '36'), padYUnit: store.get('padYUnit', 'px'),
+    foldersOn: store.get('foldersOn', '0') === '1', side: store.get('side', 'right'),
     maxVal: store.get('maxVal', ''), maxUnit: store.get('maxUnit', 'px'),
   };
 
@@ -106,13 +107,14 @@
     const mw = parseFloat(s.maxVal);
     const len = (v, u, d) => { const n = parseFloat(v); return n >= 0 ? n + u : d + 'px'; };
     root.style.setProperty('--pad-x', len(s.padXVal, s.padXUnit, 24));
-    root.style.setProperty('--pad-y', len(s.padYVal, s.padYUnit, 24));
+    root.style.setProperty('--pad-y', len(s.padYVal, s.padYUnit, 36));
     if (mw > 0) root.style.setProperty('--maxw', mw + s.maxUnit); else root.style.removeProperty('--maxw');
     const useHl =s.theme !== 'custom' && s.langOn && !!compiled[s.lang];
     document.body.classList.toggle('hl-on', useHl);
     $('customBox').hidden = s.theme !== 'custom';
     $('langBox').hidden = s.theme === 'custom';
     render();
+    $('app').className = 'side-' + s.side;
   }
 
   /* ---------- Local text storage ---------- */
@@ -120,6 +122,7 @@
   let t;
   ed.addEventListener('input', () => {
     render();
+    if (fileHandle && !dirty) { dirty = true; setLabel(); }
     clearTimeout(t);
     t = setTimeout(() => store.set('text', ed.value), 300);
   });
@@ -129,39 +132,234 @@
       e.preventDefault();
       document.execCommand('insertText', false, '  ');
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault();
-      openSave();
-    }
   });
 
-  /* ---------- Save (opens the system file explorer) ---------- */
-  async function openSave() {
-    const ext = (LANG_LIST.find((l) => l[0] === s.lang) || LANG_LIST[0])[2];
-    const suggested = 'note.' + ext;
-    const blob = new Blob([ed.value], { type: 'text/plain;charset=utf-8' });
-    if (window.showSaveFilePicker) {
-      try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: suggested,
-          types: [{ description: ext.toUpperCase() + ' file', accept: { 'text/plain': ['.' + ext] } }],
-        });
-        const w = await handle.createWritable();
-        await w.write(blob);
-        await w.close();
-      } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+  /* ---------- Files: open, save in place, folder explorer ---------- */
+  let hasFS = !!window.showOpenFilePicker;
+  let hasDir = !!window.showDirectoryPicker;
+  let fsReason = !window.isSecureContext
+    ? 'This page is not served over HTTPS (or localhost), so the browser blocks direct file access.'
+    : (!hasFS || !hasDir)
+      ? 'This browser does not support direct file access. Use Chrome or Edge (in Brave, enable brave://flags/#file-system-access-api).'
+      : '';
+  let warned = false;
+
+  /* ----- Local mode: when served by server.js, files are read/written through its API.
+         This works in any browser, including the Claude built-in browser pane. ----- */
+  let local = false, localRoot = '';
+  async function api(method, route, p, body) {
+    const r = await fetch('/api/' + route + '?path=' + encodeURIComponent(p), { method, headers: { 'X-Notepad': '1' }, body });
+    if (!r.ok) throw new Error((await r.text()) || 'HTTP ' + r.status);
+    return r;
+  }
+  const baseName = (p) => p.split('/').pop();
+  const joinPath = (a, b) => (a ? a + '/' + b : b);
+  function mkFile(p) {
+    return {
+      kind: 'file', name: baseName(p), path: p,
+      async getFile() { const text = await (await api('GET', 'file', p)).text(); return { text: async () => text }; },
+      async createWritable() { let buf = ''; return { write: async (d) => { buf += d; }, close: async () => { await api('PUT', 'file', p, buf); } }; },
+      async isSameEntry(o) { return !!o && o.path === p; },
+    };
+  }
+  function mkDir(p) {
+    return {
+      kind: 'directory', name: p ? baseName(p) : localRoot, path: p,
+      async *entries() {
+        const list = await (await api('GET', 'tree', p)).json();
+        for (const e of list) yield [e.name, e.kind === 'directory' ? mkDir(joinPath(p, e.name)) : mkFile(joinPath(p, e.name))];
+      },
+      async getFileHandle(name, opt) { const q = joinPath(p, name); if (opt && opt.create) await api('POST', 'new', q); return mkFile(q); },
+      async getDirectoryHandle(name, opt) { const q = joinPath(p, name); if (opt && opt.create) await api('POST', 'mkdir', q); return mkDir(q); },
+    };
+  }
+  async function detectLocal() {
+    try {
+      const r = await fetch('/api/info', { headers: { 'X-Notepad': '1' } });
+      if (!r.ok) return;
+      const info = await r.json();
+      if (!info || !info.local) return;
+      local = true; localRoot = info.root; hasFS = hasDir = true; fsReason = '';
+      applyFilesSettings();
+      await openFolder();
+    } catch { /* static hosting: no API, keep browser-only mode */ }
+  }
+  let fileHandle = null, dirty = false, rootDir = null, curDir = null;
+  const boxes = new Map(); // directory handle -> {kids, depth}
+  const defExt = () => (LANG_LIST.find((l) => l[0] === s.lang) || LANG_LIST[0])[2];
+
+  function setLabel() {
+    const l = $('fileLabel');
+    l.hidden = !fileHandle;
+    l.textContent = fileHandle ? fileHandle.name + (dirty ? ' •' : '') : '';
+  }
+
+  async function loadFile(handle) {
+    if (dirty && !confirm('Discard unsaved changes to ' + fileHandle.name + '?')) return;
+    const f = await handle.getFile();
+    ed.value = await f.text();
+    fileHandle = handle; dirty = false;
+    store.set('text', ed.value);
+    render(); setLabel(); markActive();
+  }
+
+  async function openFile() {
+    if (local) { // pick the file in the explorer panel
+      if (!rootDir) await openFolder();
       return;
     }
-    // Fallback (Firefox/Safari): the browser's own download flow
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = suggested;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    if (hasFS) {
+      try { const [h] = await window.showOpenFilePicker({ multiple: false }); await loadFile(h); }
+      catch (err) { if (err.name !== 'AbortError') console.error(err); }
+      return;
+    }
+    // Fallback: can read, but cannot write back in place
+    if (!warned) { warned = true; alert(fsReason + '\n\nThe file will open, but Save will download a copy instead of overwriting the original.'); }
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.onchange = async () => { const f = inp.files[0]; if (f) { ed.value = await f.text(); fileHandle = null; dirty = false; render(); setLabel(); } };
+    inp.click();
   }
-  $('btnSave').onclick = openSave;
+
+  async function writeTo(handle) {
+    const w = await handle.createWritable();
+    await w.write(ed.value);
+    await w.close();
+    dirty = false; setLabel();
+  }
+
+  // Ctrl+S saves in place; Ctrl+Shift+S (or no open file) asks where.
+  async function save(saveAs = false) {
+    try {
+      if (fileHandle && !saveAs) return await writeTo(fileHandle);
+      if (local) {
+        if (!rootDir) await openFolder();
+        const dir = (!saveAs && curDir) || rootDir;
+        const dflt = saveAs ? (fileHandle ? fileHandle.path : 'note.' + defExt()) : 'note.' + defExt();
+        const name = prompt(saveAs ? 'Save as (path inside "' + localRoot + '")' : 'File name', dflt);
+        if (!name || !name.trim()) return;
+        fileHandle = await dir.getFileHandle(name.trim().replace(/\\/g, '/'), { create: true });
+        await writeTo(fileHandle);
+        await refreshDir(dir); markActive();
+        return;
+      }
+      if (curDir && !saveAs) { // folder explorer open: create the file right there
+        const name = prompt('File name', 'note.' + defExt());
+        if (!name || !name.trim()) return;
+        fileHandle = await curDir.getFileHandle(name.trim(), { create: true });
+        await writeTo(fileHandle);
+        await refreshDir(curDir); markActive();
+        return;
+      }
+      if (hasFS) {
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName: (fileHandle ? fileHandle.name : 'note.' + defExt()),
+          types: [{ description: defExt().toUpperCase() + ' file', accept: { 'text/plain': ['.' + defExt()] } }],
+        });
+        await writeTo(fileHandle);
+        return;
+      }
+      // Fallback (no direct file access): normal download
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([ed.value], { type: 'text/plain;charset=utf-8' }));
+      a.download = 'note.' + defExt();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      if (err.name !== 'AbortError') { console.error(err); alert('Could not save: ' + err.message); }
+    }
+  }
+  $('btnSave').onclick = () => save();
+  $('btnOpen').onclick = openFile;
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(e.shiftKey); }
+  });
+
+  /* ----- Folder explorer ----- */
+  const exTree = $('exTree');
+  async function listDir(dir) {
+    const arr = [];
+    for await (const [, h] of dir.entries()) arr.push(h);
+    return arr.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'directory' ? -1 : 1));
+  }
+  async function renderDir(dir, box, depth) {
+    box.innerHTML = '';
+    for (const h of await listDir(dir)) {
+      const isDir = h.kind === 'directory';
+      const row = document.createElement('div');
+      row.className = 'ex-row ' + (isDir ? 'dir' : 'file');
+      row.style.paddingLeft = 8 + depth * 14 + 'px';
+      row.textContent = (isDir ? '▸ ' : '  ') + h.name;
+      row._h = h;
+      box.appendChild(row);
+      if (isDir) {
+        const kids = document.createElement('div');
+        kids.hidden = true;
+        box.appendChild(kids);
+        boxes.set(h, { kids, depth: depth + 1 });
+        row.onclick = async () => {
+          curDir = h;
+          if (kids.hidden) { await renderDir(h, kids, depth + 1); kids.hidden = false; row.textContent = '▾ ' + h.name; }
+          else { kids.hidden = true; row.textContent = '▸ ' + h.name; }
+          markActive();
+        };
+      } else {
+        row.onclick = () => loadFile(h).catch((e) => alert(e.message));
+      }
+    }
+    markActive();
+  }
+  async function refreshDir(dir) {
+    if (dir === rootDir) return renderDir(rootDir, exTree, 0);
+    const b = boxes.get(dir);
+    if (b) await renderDir(dir, b.kids, b.depth);
+  }
+  async function markActive() {
+    for (const row of exTree.querySelectorAll('.ex-row')) {
+      row.classList.toggle('cur-dir', row._h === curDir);
+      let on = false;
+      if (fileHandle && row._h.kind === 'file') { try { on = await row._h.isSameEntry(fileHandle); } catch {} }
+      row.classList.toggle('active', on);
+    }
+  }
+  async function openFolder() {
+    if (!hasDir) { alert(fsReason); return; }
+    try {
+      rootDir = curDir = local ? mkDir('') : await window.showDirectoryPicker({ mode: 'readwrite' });
+      boxes.clear();
+      $('explorer').hidden = false;
+      $('exName').textContent = rootDir.name;
+      await renderDir(rootDir, exTree, 0);
+    } catch (err) { if (err.name !== 'AbortError') console.error(err); }
+  }
+  function closeFolder() { rootDir = curDir = null; boxes.clear(); exTree.innerHTML = ''; $('explorer').hidden = true; }
+  async function createEntry(kind) {
+    if (!curDir) return;
+    const name = prompt(kind === 'file' ? 'New file name' : 'New folder name');
+    if (!name || !name.trim()) return;
+    try {
+      if (kind === 'file') {
+        const h = await curDir.getFileHandle(name.trim(), { create: true });
+        await refreshDir(curDir);
+        await loadFile(h);
+      } else {
+        await curDir.getDirectoryHandle(name.trim(), { create: true });
+        await refreshDir(curDir);
+      }
+    } catch (err) { alert('Could not create: ' + err.message); }
+  }
+  $('btnFolder').onclick = openFolder;
+  $('exClose').onclick = closeFolder;
+  $('exRefresh').onclick = () => curDir && refreshDir(curDir);
+  $('exNewFile').onclick = () => createEntry('file');
+  $('exNewDir').onclick = () => createEntry('dir');
+
+  function applyFilesSettings() {
+    $('app').className = 'side-' + s.side;
+    const on = s.foldersOn || local;
+    $('btnFolder').hidden = !on;
+    if (!on && rootDir) closeFolder();
+  }
 
   /* ---------- Settings (UI) ---------- */
   const dlgSet = $('dlgSettings');
@@ -171,8 +369,13 @@
     $('langOn').checked = s.langOn; $('lang').value = s.lang;
     for (const k of ['padXVal', 'padXUnit', 'padYVal', 'padYUnit']) $(k).value = s[k];
     $('maxVal').value = s.maxVal; $('maxUnit').value = s.maxUnit;
+    $('foldersOn').checked = s.foldersOn; $('side').value = s.side;
+    const note = local ? 'Local mode: editing files in "' + localRoot + '" through server.js.' : fsReason;
+    $('fsNote').hidden = !note; $('fsNote').textContent = note;
     dlgSet.showModal();
   };
+  $('foldersOn').addEventListener('change', (e) => { s.foldersOn = e.target.checked; store.set('foldersOn', s.foldersOn ? '1' : '0'); applyFilesSettings(); });
+  $('side').addEventListener('change', (e) => { s.side = e.target.value; store.set('side', s.side); applyFilesSettings(); });
   for (const k of ['padXVal', 'padXUnit', 'padYVal', 'padYUnit', 'maxVal', 'maxUnit']) {
     $(k).addEventListener('input', (e) => { s[k] = e.target.value; store.set(k, s[k]); applySettings(); });
   }
@@ -188,4 +391,6 @@
   dlgSet.addEventListener('click', (e) => { if (e.target === dlgSet) dlgSet.close(); });
 
   applySettings();
+  applyFilesSettings();
+  detectLocal();
 })();
