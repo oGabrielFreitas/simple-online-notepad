@@ -412,7 +412,7 @@
     $('langOn').checked = s.langOn; $('lang').value = s.lang;
     for (const k of ['padXVal', 'padXUnit', 'padYVal', 'padYUnit']) $(k).value = s[k];
     $('maxVal').value = s.maxVal; $('maxUnit').value = s.maxUnit;
-    $('foldersOn').checked = s.foldersOn; $('side').value = s.side;
+    $('foldersOn').checked = s.foldersOn || local; $('foldersOn').disabled = local; $('side').value = s.side;
     const note = local ? 'Local mode: editing files in "' + localRoot + '" through server.js.' : fsReason;
     $('fsNote').hidden = !note; $('fsNote').textContent = note;
     dlgSet.showModal();
